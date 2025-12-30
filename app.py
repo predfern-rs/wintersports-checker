@@ -155,4 +155,41 @@ if majestic_file:
         # Rename to your preferred output names
         merged.rename(columns={
             "Organic / Total Keywords": "Organic Total Keywords",
-            "Orga
+            "Organic / Traffic": "Organic Traffic",
+            "Organic / Top Countries": "Organic Top Countries",
+            "Ref. domains / Followed": "Ref. domains followed",
+            "Outgoing domains / Followed": "Outgoing domains Followed",
+        }, inplace=True)
+
+        # Drop helper columns
+        merged.drop(columns=["Item_clean", "Target_clean"], inplace=True)
+
+        # Compute LD:RD ratio
+        merged["LD:RD ratio"] = merged.apply(
+            lambda row: round_up(
+                safe_divide(row.get("Outgoing domains Followed"), row.get("Ref. domains followed"))
+            ),
+            axis=1
+        )
+
+        # Debug: show match rate
+        matched_count = merged["Domain Rating"].notna().sum()
+        st.info(f"Matched Ahrefs rows: {matched_count:,} / {len(merged):,}")
+
+        st.success("Ahrefs metrics appended successfully.")
+        st.subheader("Merged Output (Majestic + Ahrefs)")
+        st.dataframe(merged, use_container_width=True)
+
+        # Download merged CSV
+        merged_csv = merged.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download Merged CSV",
+            data=merged_csv,
+            file_name="majestic_winter_sports_with_ahrefs.csv",
+            mime="text/csv"
+        )
+
+    else:
+        st.info("Upload an Ahrefs Batch Analysis CSV to append Ahrefs metrics and calculate LD:RD ratio.")
+else:
+    st.info("Upload your Majestic CSV to get started.")
