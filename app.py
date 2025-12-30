@@ -94,14 +94,15 @@ if majestic_file:
         # We’ll try to match by column names, but if your export uses different naming,
         # you can rename columns in the mapping below.
         col_map = {
-            "Target": "Target",
-            "Domain Rating": "Domain Rating",
-            "Organic Total Keywords": "Organic Total Keywords",
-            "Organic Traffic": "Organic Traffic",
-            "Organic Top Countries": "Organic Top Countries",
-            "Ref. domains followed": "Ref. domains followed",
-            "Outgoing domains Followed": "Outgoing domains Followed",
-        }
+    "Target": "Target",
+    "Domain Rating": "Domain Rating",
+    "Organic Total Keywords": "Organic / Total Keywords",
+    "Organic Traffic": "Organic / Traffic",
+    "Organic Top Countries": "Organic / Top Countries",
+    "Ref. domains followed": "Ref. domains / Followed",
+    "Outgoing domains Followed": "Outgoing domains / Followed",
+}
+
 
         # Check required Ahrefs columns exist
         missing_ahrefs = [v for v in col_map.values() if v not in ahrefs_df.columns]
@@ -156,3 +157,4 @@ if majestic_file:
         st.info("Upload an Ahrefs Batch Analysis CSV to append Ahrefs metrics and calculate LD:RD ratio.")
 else:
     st.info("Upload your Majestic CSV to get started.")
+
