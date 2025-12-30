@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import math
+import re
 
 st.set_page_config(page_title="Majestic + Ahrefs Winter Sports Filter", layout="wide")
 
@@ -24,6 +25,27 @@ case_sensitive = st.checkbox("Case sensitive topic match", value=False)
 # -----------------------------
 # Helpers
 # -----------------------------
+def normalize_domain(x):
+    """Convert URLs/domains to clean root domains for matching."""
+    if pd.isna(x):
+        return None
+    x = str(x).strip().lower()
+
+    # remove protocol
+    x = re.sub(r"^https?://", "", x)
+
+    # remove www
+    x = re.sub(r"^www\.", "", x)
+
+    # remove everything after first /
+    x = x.split("/")[0]
+
+    # remove trailing dots/spaces
+    x = x.strip(" .")
+
+    return x if x else None
+
+
 def safe_divide(n, d):
     try:
         n = float(n)
@@ -34,6 +56,7 @@ def safe_divide(n, d):
     except:
         return None
 
+
 def round_up(x):
     if x is None:
         return None
@@ -41,6 +64,7 @@ def round_up(x):
         return int(math.ceil(x))
     except:
         return None
+
 
 # -----------------------------
 # Main logic
@@ -54,9 +78,7 @@ if majestic_file:
 
     missing_majestics = [c for c in ["Item"] + topic_cols + value_cols if c not in majestic_df.columns]
     if missing_majestics:
-        st.error(
-            "Majestic CSV is missing expected columns:\n\n" + "\n".join(missing_majestics)
-        )
+        st.error("Majestic CSV is missing expected columns:\n\n" + "\n".join(missing_majestics))
         st.stop()
 
     # Extract matching topical trust flow rows
@@ -82,79 +104,55 @@ if majestic_file:
 
     majestic_out = pd.concat(matches, ignore_index=True)
 
+    # Add cleaned domain for merging
+    majestic_out["Item_clean"] = majestic_out["Item"].apply(normalize_domain)
+
     st.success(f"Majestic: Found {len(majestic_out):,} matching topical trust flow entries.")
     st.subheader("Majestic Filter Output")
-    st.dataframe(majestic_out, use_container_width=True)
+    st.dataframe(majestic_out.drop(columns=["Item_clean"]), use_container_width=True)
 
-    # If Ahrefs file is also uploaded, merge it
+    # If Ahrefs file uploaded, merge it
     if ahrefs_file:
         ahrefs_df = pd.read_csv(ahrefs_file)
 
-        # Expected Ahrefs fields (by typical export headers)
-        # We’ll try to match by column names, but if your export uses different naming,
-        # you can rename columns in the mapping below.
-        col_map = {
-    "Target": "Target",
-    "Domain Rating": "Domain Rating",
-    "Organic Total Keywords": "Organic / Total Keywords",
-    "Organic Traffic": "Organic / Traffic",
-    "Organic Top Countries": "Organic / Top Countries",
-    "Ref. domains followed": "Ref. domains / Followed",
-    "Outgoing domains Followed": "Outgoing domains / Followed",
-}
+        # Exact Ahrefs column names from your export
+        required_cols = [
+            "Target",
+            "Domain Rating",
+            "Organic / Total Keywords",
+            "Organic / Traffic",
+            "Organic / Top Countries",
+            "Ref. domains / Followed",
+            "Outgoing domains / Followed",
+        ]
 
-
-        # Check required Ahrefs columns exist
-        missing_ahrefs = [v for v in col_map.values() if v not in ahrefs_df.columns]
+        missing_ahrefs = [c for c in required_cols if c not in ahrefs_df.columns]
         if missing_ahrefs:
             st.error(
                 "Ahrefs CSV is missing expected columns:\n\n"
                 + "\n".join(missing_ahrefs)
-                + "\n\nTip: Open your Ahrefs file and confirm column headers match exactly."
+                + "\n\nTip: Make sure you're uploading the correct Ahrefs Batch Analysis export."
             )
             st.stop()
 
-        # Keep only the necessary columns
-        ahrefs_keep = list(col_map.values())
-        ahrefs_small = ahrefs_df[ahrefs_keep].copy()
+        # Keep only needed columns
+        ahrefs_small = ahrefs_df[required_cols].copy()
 
-        # Deduplicate by Target (in case Ahrefs export has duplicates)
-        ahrefs_small = ahrefs_small.drop_duplicates(subset=["Target"])
+        # Add cleaned domain for merging
+        ahrefs_small["Target_clean"] = ahrefs_small["Target"].apply(normalize_domain)
 
-        # Merge: Majestic Item matches Ahrefs Target
+        # Deduplicate by cleaned domain
+        ahrefs_small = ahrefs_small.drop_duplicates(subset=["Target_clean"])
+
+        # Merge on cleaned domain
         merged = majestic_out.merge(
             ahrefs_small,
             how="left",
-            left_on="Item",
-            right_on="Target"
+            left_on="Item_clean",
+            right_on="Target_clean"
         )
 
-        # Remove Target column after merge (optional - you can keep it if you want)
-        merged.drop(columns=["Target"], inplace=True)
-
-        # Compute LD:RD ratio
-        merged["LD:RD ratio"] = merged.apply(
-            lambda row: round_up(
-                safe_divide(row.get("Outgoing domains Followed"), row.get("Ref. domains followed"))
-            ),
-            axis=1
-        )
-
-        st.success("Ahrefs metrics appended successfully.")
-        st.subheader("Merged Output (Majestic + Ahrefs)")
-        st.dataframe(merged, use_container_width=True)
-
-        # Download merged CSV
-        merged_csv = merged.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="Download Merged CSV",
-            data=merged_csv,
-            file_name="majestic_winter_sports_with_ahrefs.csv",
-            mime="text/csv"
-        )
-
-    else:
-        st.info("Upload an Ahrefs Batch Analysis CSV to append Ahrefs metrics and calculate LD:RD ratio.")
-else:
-    st.info("Upload your Majestic CSV to get started.")
-
+        # Rename to your preferred output names
+        merged.rename(columns={
+            "Organic / Total Keywords": "Organic Total Keywords",
+            "Orga
